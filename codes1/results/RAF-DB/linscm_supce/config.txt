@@ -1,0 +1,42 @@
+image_size: 224
+dataset: RAF-DB
+batch_size: 32
+num_AU: 16
+lr_g: 5e-05
+lr_e: 5e-05
+lr_d: 0.0001
+lr_p: 5e-05
+lr_a: 0.001
+beta1: 0.0
+beta2: 0.999
+d_steps_per_iter: 1
+g_steps_per_iter: 1
+n_epochs: 1000
+start_epoch: 1
+seed: 51
+latent_dim: 128
+sup_coef: 1
+sup_prop: 1
+sup_type: ce
+labels: smile
+prior: linscm
+enc_arch: resnet18
+enc_dist: gaussian
+enc_fc_size: 2048
+enc_noise_dim: 128
+dec_arch: sagan
+dec_dist: implicit
+g_conv_dim: 64
+dis_fc_size: 2048
+d_conv_dim: 64
+resume: False
+ckpt_dir: 
+print_every: 500
+sample_every: 1
+sample_every_epoch: 1
+save_model_every: 5
+save_name: 
+save_n_samples: 64
+save_n_recons: 32
+nrow: 8
+commond: python E:/DeskTop/IFER/codes1/train.py
