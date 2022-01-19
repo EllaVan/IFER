@@ -42,7 +42,6 @@ def train(device, hyper_dict):
     netG_mot = dis_model.Generator_mot(args).to(device)
 
     log_dir = args.log_dir
-    writer = SummaryWriter(log_dir)
     if args.continue_from != 0:
         f = torch.load(args.continue_file)
         cnn.load_state_dict(f['cnn'])
@@ -61,9 +60,10 @@ def train(device, hyper_dict):
                 os.makedirs(os.path.join(log_dir, folder))
             else:
                 os.makedirs(os.path.join(log_dir, folder))
+    writer = SummaryWriter(os.path.join(log_dir, 'mean_vis'))
 
-    optimG_mot = optim.Adam(netG_mot.parameters(), lr=args.lr)#, betas=(args.beta1, 0.999))
-    optimCnnDeconv = optim.Adam(cnn_deconv.parameters(), lr=args.lr * 10.0)#, betas=(args.beta1, 0.999))
+    optimG_mot = optim.Adam(netG_mot.parameters(), lr=args.lr, betas=(args.beta1, 0.999))
+    optimCnnDeconv = optim.Adam(cnn_deconv.parameters(), lr=args.lr * 10.0, betas=(args.beta1, 0.999))
     optimAtt = optim.Adam(
         [{'params': cnn.parameters(), 'lr': args.lr},
          {'params': netE1.parameters(), 'lr': args.lr},
@@ -71,7 +71,12 @@ def train(device, hyper_dict):
          {'params': netE2.parameters(), 'lr': args.lr}
          ])
 
-    train_loader, test_loader, all_loader = neutral_image.getRAFdata()
+    if args.dataset == 'RAF':
+        train_loader, test_loader, all_loader = neutral_image.getRAFdata()
+    elif args.dataset == 'AffectNet':
+        train_loader, test_loader, all_loader = neutral_image.getAffectdata()
+    elif args.dataset == 'FERPLUS':
+        train_loader, test_loader, all_loader = neutral_image.getFERdata()
 
     MSE = nn.MSELoss()
 
@@ -104,10 +109,12 @@ def train(device, hyper_dict):
                 means = Variable(torch.mean(means_t, dim=0, keepdim=True), requires_grad=True)
                 log_var = Variable(torch.mean(log_var_t, dim=0, keepdim=True), requires_grad=True)
                 std = torch.exp(0.5 * log_var)
+                # std = log_var
             else:
                 means = Variable(means_record, requires_grad=True)
                 log_var = Variable(log_var_record, requires_grad=True)
                 std = torch.exp(0.5 * log_var)
+                # std = log_var
 
             means_record = means.data
             log_var_record = log_var.data
@@ -124,6 +131,7 @@ def train(device, hyper_dict):
             fake_means = Variable(torch.mean(fake_means_t, dim=0, keepdim=True), requires_grad=False)
             fake_log_var = Variable(torch.mean(fake_log_var_t, dim=0, keepdim=True), requires_grad=False)
             fake_std = torch.exp(0.5 * fake_log_var)
+            # fake_std = fake_log_var
             fake_res = netG(att=z, mot=fake_mot)
             fake_eps = netE2(fake_res)
             fake_z = fake_means.repeat(data.size(0), 1) + fake_eps * fake_std

@@ -21,9 +21,10 @@ def parse_args():
     parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu choice')
     parser.add_argument('--manualSeed', type=int, default=20, help='manual seed')
     parser.add_argument('--continue_from', type=int, default=0, help='save interval')
-    parser.add_argument('--log_dir', type=str, default="save/try0102_11", help='log_dir')
+    parser.add_argument('--dataset', type=str, default="RAF")
+    parser.add_argument('--log_dir', type=str, default="save/RAF/try0106", help='log_dir')
     parser.add_argument('--continue_file', type=str,
-                        default='save/try1222/net_state/epoch200',
+                        default=None,
                         help='net state file')
     parser.add_argument('--nepoch', type=int, default=500, help='number of epochs to train for')
     parser.add_argument('--save_epoch', type=int, default=50, help='number of epochs to save')
@@ -51,8 +52,6 @@ if __name__ == '__main__':
     if not os.path.exists(args.log_dir):
         os.mkdir(args.log_dir)
     cur_time = datetime.datetime.now(pytz.timezone('Asia/Shanghai'))
-    log_file = str(cur_time).split('.')[0]+'.log'
-    sys.stdout = open(os.path.join(args.log_dir, log_file), 'wt')
     print(cur_time)
 
     global device
@@ -62,10 +61,7 @@ if __name__ == '__main__':
     if args.manualSeed is None:
         args.manualSeed = random.randint(1, 10000)
     print("Random Seed: ", args.manualSeed)
-    random.seed(args.manualSeed)
-    torch.manual_seed(args.manualSeed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.manualSeed)
+    setup_seed(args.manualSeed)
 
     print('---- START RUNNING ----')
     runner1220.train(device, args)

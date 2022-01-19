@@ -27,11 +27,8 @@ class RafSubDataSet(data.Dataset):
         self.phase = phase
         self.transform = transform
         self.raf_path = raf_path
-        self.seenclasses = 6
-        self.unseenclasses = 11
-        self.allclasses = self.seenclasses + self.unseenclasses
+        self.classes = 6
         self.nodes = ['surprise', 'fear', 'disgust', 'happiness', 'sadness', 'anger']
-        # self.getwordembedding()
 
         NAME_COLUMN = 0
         LABEL_COLUMN = 1
@@ -141,7 +138,7 @@ def getRAFdata():
 def Affectparse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--affect_label_path', type=str,
-                        default='/media/database/data4/wf/work01/datasets/AffectNet/Manually_Annotated_file_lists',
+                        default='/media/database/data4/wf/GraphNet-FER/work01/datasets/AffectNet/Manually_Annotated_file_lists',
                         # default='../../datasets/AffectNet/Manually_Annotated_file_lists',
                         help='AffectNet label path.')
     parser.add_argument('--affect_dataset_path', type=str,
@@ -163,16 +160,20 @@ class AffectSubDataSet(data.Dataset):
         self.test_num = train_num
         self.nseenclasses = 4
         self.nunseenclasses = 3
+        self.nodes = ['Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Anger', 'Contempt']
 
         df1 = pd.read_csv(os.path.join(self.label_path, 'training.csv'),
                           header=None, low_memory=False).drop(0)
+        df1['usage'] = ['training'] * df1.shape[0]
         df2 = pd.read_csv(os.path.join(self.label_path, 'validation.csv'),
                           header=None, low_memory=False).drop(0)
+        df2['usage'] = ['validation'] * df2.shape[0]
         df = pd.concat([df1, df2], axis=0)
         df_name = df.iloc[:, 0]
+        df_usage = df.iloc[:, -1]
         df_label = df.iloc[:, 6]
-        df = pd.concat([df_name, df_label], axis=1)
-        new_col = [0, 1]
+        df = pd.concat([df_name, df_label, df_usage], axis=1)
+        new_col = [0, 1, 2]
         df.columns = new_col
         NAME_COLUMN = 0
         LABEL_COLUMN = 1
@@ -189,14 +190,15 @@ class AffectSubDataSet(data.Dataset):
         # 1: Happy, 2: Sad, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, 7: Contempt
         # 训练集：重新编码，0: Happy, 1: Sad, 2: Surprise, 3: Anger
         # 测试集：重新编码，4：Fear, 5: Disgust 6: Contempt
+        usage_column = 2
         df_tr = []
         df_te = []
         for i in range(1, 8):
             dfi = df[df[LABEL_COLUMN] == i]
-            if i == 4 or i == 5 or i == 7:
-                df_te.append(dfi)
-            else:
-                df_tr.append(dfi)
+            dfi_train = dfi[dfi[usage_column] == 'training']
+            dfi_val = dfi[dfi[usage_column] == 'validation']
+            df_tr.append(dfi_train)
+            df_te.append(dfi_val)
 
         if phase == 'train':
             file_names = []
@@ -220,7 +222,21 @@ class AffectSubDataSet(data.Dataset):
             labels = []
             names = df_te[label_index].iloc[:, NAME_COLUMN].values
             file_names.append(names)
-            label = np.array([label_index + train_num] * names.shape[0])
+            # raf_label = 0
+            # if label_index == 0:
+            #     raf_label = 3
+            # elif label_index == 1:
+            #     raf_label = 4
+            # elif label_index == 2:
+            #     raf_label = 0
+            # elif label_index == 3:
+            #     raf_label = 5
+            # elif label_index == 4:
+            #     raf_label = 1
+            # elif label_index == 5:
+            #     raf_label = 2
+            label = np.array([label_index] * names.shape[0])
+            # label = np.array([raf_label] * names.shape[0])
             labels.append(label)
             file_names = np.hstack(file_names)
             self.label = np.hstack(labels)
@@ -236,12 +252,14 @@ class AffectSubDataSet(data.Dataset):
 
     def __getitem__(self, idx):
         path = self.file_paths[idx]
-        image = cv2.imread(path)
+        image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        # image = image[:, :, ::-1]  # BGR to RGB
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if image is None:
             image, label, index = None, None, None
             return image, label, index
         else:
-            image = image[:, :, ::-1]  # BGR to RGB
+            # image = image[:, :, ::-1]  # BGR to RGB
             # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image = image.copy()
             label = self.label[idx]
@@ -256,8 +274,9 @@ def getAffectdata():
         transforms.ToPILImage(),
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225]),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225]),
+        transforms.Normalize([0.485, ], [0.229, ]),
         transforms.RandomErasing(scale=(0.02, 0.25))
     ])
     train_dataset = AffectSubDataSet(args.affect_label_path, args.affect_dataset_path,
@@ -273,13 +292,14 @@ def getAffectdata():
         transforms.ToPILImage(),
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225]),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225]),
+        transforms.Normalize([0.485, ], [0.229, ]),
     ])
     test_dataset = []
     test_loader = []
     test_len = 0
-    for i in range(args.affect_test_num):
+    for i in range(7):
         test_dataset.append(AffectSubDataSet(args.affect_label_path, args.affect_dataset_path,
                                              i, args.affect_train_num, phase='test',
                                              transform=data_transforms_val))
@@ -298,10 +318,10 @@ def FERparse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--fer_label_path', type=str,
                         # default='../datasets/FERPLUS',
-                        default='/media/database/data4/wf/work01/datasets/FERPLUS',
+                        default='/media/database/data4/wf/GraphNet-FER/work01/datasets/FERPLUS',
                         help='FERPLUS label path.')
     parser.add_argument('--fer_dataset_path', type=str,
-                        default='/media/database/data4/wf/work01/datasets/FERPLUS',
+                        default='/media/database/data4/wf/GraphNet-FER/work01/datasets/FERPLUS',
                         help='FERPLUS dataset path.')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size.')
     parser.add_argument('--workers', type=int, default=4)
@@ -318,6 +338,7 @@ class FERSubDataSet(data.Dataset):
         self.dataset_path = dataset_path
         self.nseenclasses = 4
         self.nunseenclasses = 3
+        self.nodes = ['Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Anger', 'Contempt']
 
         ferplus = pd.read_csv(os.path.join(self.label_path, 'fer2013new.csv'))
         fer2013 = pd.read_csv(os.path.join(self.label_path, 'fer2013.csv'))[['emotion']]
@@ -369,48 +390,74 @@ class FERSubDataSet(data.Dataset):
         LABEL_COLUMN = 2
 
         if phase == 'train':
-            labels = []
+            labeltp = []
             file_names = fer_happy[name_list]
             file_names = pd.concat([file_names, fer_sadness[name_list]], axis=0)
             file_names = pd.concat([file_names, fer_surprise[name_list]], axis=0)
             file_names = pd.concat([file_names, fer_anger[name_list]], axis=0)
+            file_names = pd.concat([file_names, fer_fear[name_list]], axis=0)
+            file_names = pd.concat([file_names, fer_disgust[name_list]], axis=0)
+            file_names = pd.concat([file_names, fer_contempt[name_list]], axis=0)
 
-            labels.append(fer_happy.iloc[:, LABEL_COLUMN].values)
-            labels.append(fer_sadness.iloc[:, LABEL_COLUMN].values - 1)
-            labels.append(fer_surprise.iloc[:, LABEL_COLUMN].values + 1)
-            labels.append(fer_anger.iloc[:, LABEL_COLUMN].values)
+            labeltp.append(fer_happy.iloc[:, LABEL_COLUMN].values)
+            labeltp.append(fer_sadness.iloc[:, LABEL_COLUMN].values - 1)
+            labeltp.append(fer_surprise.iloc[:, LABEL_COLUMN].values + 1)
+            labeltp.append(fer_anger.iloc[:, LABEL_COLUMN].values)
+            labeltp.append(fer_fear.iloc[:, LABEL_COLUMN].values - 1)
+            labeltp.append(fer_disgust.iloc[:, LABEL_COLUMN].values + 1)
+            labeltp.append(fer_contempt.iloc[:, LABEL_COLUMN].values)
 
-            self.label = np.hstack(labels)
+            labeltp = np.hstack(labeltp)
+            labels = []
             self.file_paths = []
             for i in range(file_names.shape[0]):
                 filei = file_names.iloc[i, :]
                 usage = filei[0]
-                name = int(filei[1].split('.')[0][3:])
-                raw_class = str(fer2013.iloc[name, 0])
-                path = os.path.join(self.dataset_path, usage, raw_class, str(name) + '.jpg')
-                self.file_paths.append(path)
+                if usage != 'PrivateTest':
+                    name = int(filei[1].split('.')[0][3:])
+                    raw_class = str(fer2013.iloc[name, 0])
+                    path = os.path.join(self.dataset_path, usage, raw_class, str(name) + '.jpg')
+                    self.file_paths.append(path)
+                    labels.append(labeltp[i])
+            self.label = np.hstack(labels)
 
         if phase == 'test':
-            labels = []
+            labeltp = []
             if label_index == 0:
-                file_names = fer_fear[name_list]
-                labels.append(fer_fear.iloc[:, LABEL_COLUMN].values - 1)
+                file_names = fer_happy[name_list]
+                labeltp.append(fer_happy.iloc[:, LABEL_COLUMN].values)
             if label_index == 1:
-                file_names = fer_disgust[name_list]
-                labels.append(fer_disgust.iloc[:, LABEL_COLUMN].values + 1)
+                file_names = fer_sadness[name_list]
+                labeltp.append(fer_sadness.iloc[:, LABEL_COLUMN].values - 1)
             if label_index == 2:
+                file_names = fer_surprise[name_list]
+                labeltp.append(fer_surprise.iloc[:, LABEL_COLUMN].values + 1)
+            if label_index == 3:
+                file_names = fer_anger[name_list]
+                labeltp.append(fer_anger.iloc[:, LABEL_COLUMN].values)
+            if label_index == 4:
+                file_names = fer_fear[name_list]
+                labeltp.append(fer_fear.iloc[:, LABEL_COLUMN].values - 1)
+            if label_index == 5:
+                file_names = fer_disgust[name_list]
+                labeltp.append(fer_disgust.iloc[:, LABEL_COLUMN].values + 1)
+            if label_index == 6:
                 file_names = fer_contempt[name_list]
-                labels.append(fer_contempt.iloc[:, LABEL_COLUMN].values)
+                labeltp.append(fer_contempt.iloc[:, LABEL_COLUMN].values)
+            labeltp = np.hstack(labeltp)
 
-            self.label = np.hstack(labels)
+            labels = []
             self.file_paths = []
             for i in range(file_names.shape[0]):
                 filei = file_names.iloc[i, :]
                 usage = filei[0]
-                name = int(filei[1].split('.')[0][3:])
-                raw_class = str(fer2013.iloc[name, 0])
-                path = os.path.join(self.dataset_path, usage, raw_class, str(name) + '.jpg')
-                self.file_paths.append(path)
+                if usage == 'PrivateTest':
+                    name = int(filei[1].split('.')[0][3:])
+                    raw_class = str(fer2013.iloc[name, 0])
+                    path = os.path.join(self.dataset_path, usage, raw_class, str(name) + '.jpg')
+                    self.file_paths.append(path)
+                    labels.append(labeltp[i])
+            self.label = np.hstack(labels)
 
     def __len__(self):
         return len(self.file_paths)
@@ -475,11 +522,5 @@ def getFERdata():
     # return train_dataset, test_dataset
 
 
-# train_loader, test_loader = getRAFdata()
-# a = [0]
-# num = []
-# sum = 0
-# for i in range(len(test_loader)):
-#     a = a + (test_loader[i].dataset.file_paths)
-#     sum += len(test_loader[i].dataset.file_paths)
-#     num.append(sum)
+if __name__ == '__main__':
+    train_loader, test_loader = getFERdata()

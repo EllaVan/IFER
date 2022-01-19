@@ -22,12 +22,13 @@ import scipy.optimize as opt
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
-    parser.add_argument('--log_dir', type=str, default="save/try0102_1", help='log_dir')
+    parser.add_argument('--dataset', type=str, default="RAF")
+    parser.add_argument('--log_dir', type=str, default="save/RAF/try0106", help='log_dir')
     parser.add_argument('--means_file', type=str,
-                        default='save/try0102_1/net_state/epoch200',
+                        default='save/RAF/try0106/net_state/epoch200',
                         help='net state file')
     parser.add_argument('--mot_file', type=str,
-                        default='save/try0102_1/mot_gen_2/mot_gen_epoch100',
+                        default='save/RAF/try0106/mot_gen/mot_gen_epoch100',
                         help='net state file')
     parser.add_argument('--size_mot', type=int, default=512, help='dimension of motion')
     parser.add_argument('--size_att', type=int, default=512, help='dimension of attribute')
@@ -74,10 +75,10 @@ def cal_cos_similarity(imgs, att, mot, res):
     return cos_att, cos_mot, cos_res
 
 
-def cal_test_vis(imgs, att):
+def cal_test_vis(imgs, feat, kind):
     channel_mean = [0.485, 0.456, 0.406]
     channel_std = [0.229, 0.224, 0.225]
-    recon_tmp1 = att.unsqueeze(2)
+    recon_tmp1 = feat.unsqueeze(2)
     recon_tmp2 = recon_tmp1.expand(recon_tmp1.size(0), recon_tmp1.size(1), 49)
     recon_tmp3 = recon_tmp2.reshape(recon_tmp2.size(0), recon_tmp2.size(1), 7, 7)
     recon_data = cnn_deconv(recon_tmp3)
@@ -87,18 +88,36 @@ def cal_test_vis(imgs, att):
         for channel_i in range(1):
             recon_data[image_i][channel_i, :, :] = recon_data[image_i][channel_i, :, :] * channel_std[
                 channel_i] + channel_mean[channel_i]
+            imgs[image_i][channel_i, :, :] = imgs[image_i][channel_i, :, :] * channel_std[
+                channel_i] + channel_mean[channel_i]
         att_img = ToPILImage()(recon_data[image_i])
+        ori_img = ToPILImage()(imgs[image_i])
         vis_name = subloader.dataset.file_paths[indexes[image_i].detach().cpu().item()]
-        vis_name = vis_name.split('.')[0].split('/')[-1]
-        att_path = os.path.join(args.log_dir, 'test_vis', vis_name + '_att_eps.png')
+        vis_name = vis_name.split('.')[0].split('/')[-1].split('_')
+        vis_name = vis_name[0] + '_' + vis_name[1] + kind
+        if kind == 'att':
+            ori_name = vis_name + 'ori'
+            ori_img.save(os.path.join(args.log_dir, 'test_vis', ori_name + '.png'))
+        vis_name = vis_name + kind
+        att_path = os.path.join(args.log_dir, 'test_vis', vis_name + '.png')
         att_img.save(att_path)
-    recon_tmp1 = means.unsqueeze(2)
-    recon_tmp2 = recon_tmp1.expand(recon_tmp1.size(0), recon_tmp1.size(1), 49)
-    recon_tmp3 = recon_tmp2.reshape(recon_tmp2.size(0), recon_tmp2.size(1), 7, 7)
-    recon_means = cnn_deconv(recon_tmp3)
-    img_path = os.path.join(args.log_dir, 'test_vis', 'means.png')
-    means_img = ToPILImage()(recon_means[0])
-    means_img.save(img_path)
+
+    if kind == 'att':
+        recon_tmp1 = means.unsqueeze(2)
+        recon_tmp2 = recon_tmp1.expand(recon_tmp1.size(0), recon_tmp1.size(1), 49)
+        recon_tmp3 = recon_tmp2.reshape(recon_tmp2.size(0), recon_tmp2.size(1), 7, 7)
+        recon_means = cnn_deconv(recon_tmp3)
+        img_path = os.path.join(args.log_dir, 'test_vis', 'means.png')
+        means_img = ToPILImage()(recon_means[0])
+        means_img.save(img_path)
+
+        recon_tmp1 = std.unsqueeze(2)
+        recon_tmp2 = recon_tmp1.expand(recon_tmp1.size(0), recon_tmp1.size(1), 49)
+        recon_tmp3 = recon_tmp2.reshape(recon_tmp2.size(0), recon_tmp2.size(1), 7, 7)
+        recon_std = cnn_deconv(recon_tmp3)
+        img_path = os.path.join(args.log_dir, 'test_vis', 'std.png')
+        std_img = ToPILImage()(recon_std[0])
+        std_img.save(img_path)
 
 if __name__ == '__main__':
     args = parse_args()
@@ -131,7 +150,16 @@ if __name__ == '__main__':
     sd.update(mot_f['cnn'])
     cnn.load_state_dict(sd)
 
-    cls_logits = dis_model.Discriminator_D1(args, 6).to(device)
+    if args.dataset == 'RAF':
+        train_loader, test_loader = image_feature.getRAFdata()
+    elif args.dataset == 'AffectNet':
+        train_loader, test_loader = image_feature.getAffectdata()
+    elif args.dataset == 'FERPLUS':
+        train_loader, test_loader = image_feature.getFERdata()
+    test_nodes = train_loader.dataset.nodes
+    num_cls = len(test_nodes)
+
+    cls_logits = dis_model.Discriminator_D1(args, num_cls).to(device)
     sd = cls_logits.state_dict()
     sd.update(mot_f['Dis_mot'])
     cls_logits.load_state_dict(sd)
@@ -147,9 +175,6 @@ if __name__ == '__main__':
     netG_mot.load_state_dict(sd)
     netG_mot.to(device)
 
-    train_loader, test_loader = image_feature.getRAFdata()
-    test_nodes = train_loader.dataset.nodes
-
     netE2.eval()
     netG_mot.eval()
     cnn.eval()
@@ -163,24 +188,26 @@ if __name__ == '__main__':
             subloader = test_loader[label_i]
             # subloader = train_loader
             for batch_i, (imgs, targets, indexes) in enumerate(subloader):
+                if imgs is not None:
+                    imgs = imgs.to(device)
+                    res, indices = cnn(imgs)
+                    eps = netE2(res)
+                    att = means.repeat(imgs.size(0), 1) + eps * std
+                    mot = netG_mot(res, att)
 
-                imgs = imgs.to(device)
-                res, indices = cnn(imgs)
-                eps = netE2(res)
-                att = means.repeat(imgs.size(0), 1) + eps * std
-                mot = netG_mot(res, att)
+                    # if label_i == 2 and batch_i == 1:
+                    if flag == 1:
+                        cos_att, cos_mot, cos_res = cal_cos_similarity(imgs, att, mot, res)
+                        cal_test_vis(imgs, att, 'att')
+                        cal_test_vis(imgs, mot, 'mot')
+                        flag = 0
 
-                if flag == 1:
-                    cos_att, cos_mot, cos_res = cal_cos_similarity(imgs, att, mot, res)
-                    cal_test_vis(imgs, att)
-                    flag = 0
-
-                res_logits = cls_logits(res)
-                mot_logits = cls_logits(mot)
-                _, res_pred = torch.max(res_logits, dim=1)
-                res_accT += torch.eq(res_pred, targets.to(device)).type(torch.FloatTensor)
-                _, att_pred = torch.max(mot_logits, dim=1)
-                mot_accT += torch.eq(att_pred, targets.to(device)).type(torch.FloatTensor)
+                    res_logits = cls_logits(res)
+                    mot_logits = cls_logits(mot)
+                    _, res_pred = torch.max(res_logits, dim=1)
+                    res_accT += torch.eq(res_pred, targets.to(device)).type(torch.FloatTensor)
+                    _, att_pred = torch.max(mot_logits, dim=1)
+                    mot_accT += torch.eq(att_pred, targets.to(device)).type(torch.FloatTensor)
 
         print('acc of res: %.4f, acc of mot: %.4f' % (np.array(res_accT).mean(), np.array(mot_accT).mean()))
 
