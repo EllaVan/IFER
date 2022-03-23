@@ -141,6 +141,7 @@ class ResNetBase(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x, indices = self.maxpool(x)
+        # x = self.maxpool(x)
 
         x = self.layer1(x) 
         x = self.layer2(x) 
@@ -149,6 +150,7 @@ class ResNetBase(nn.Module):
 
         x = x.view(x.shape[0], x.shape[1], -1).mean(dim=2)
         return x, indices
+        # return x
 
 
 def make_resnet18_base(**kwargs):
@@ -211,7 +213,7 @@ class ResNet(nn.Module):
         self.fc = nn.Linear(self.resnet_base.out_channels, num_classes)
 
     def forward(self, x, need_features=False):
-        x = self.resnet_base(x)
+        x, _ = self.resnet_base(x)
         feat = x
         x = self.fc(x)
         if need_features:

@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 
 class GloVe():
@@ -59,4 +60,28 @@ class GloVe():
 
     def getdimension(self):
         return self.dimension
+
+
+def get_au_embedding(glove, au_action_path):
+    au_description = {}
+    with open(au_action_path, "r") as f:
+        for line in f.readlines():
+            line = line.strip('\n')  # 去掉列表中每一个元素的换行符
+            terms = line.split(':')
+            au_description[terms[0]] = terms[1]
+    au_name = list(au_description)
+    au_vectors = []
+    au_embedding = {}
+    for i in range(len(au_name)):
+        au_vectors.append(glove[au_description[au_name[i]]])
+    au_vectors = torch.stack(au_vectors)
+    au_vectors = F.normalize(au_vectors)
+    for i in range(len(au_name)):
+        au_embedding[au_name[i]] = au_vectors[i]
+    return au_embedding
+
+
+if __name__ == '__main__':
+    glove = GloVe('/media/database/data4/wf/GraphNet-FER/work01/materials/glove.6B.300d.txt')
+    au_embedding = get_au_embedding(glove, 'AU_action.txt')
 

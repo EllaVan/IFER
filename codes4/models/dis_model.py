@@ -9,13 +9,13 @@ import math
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.01)
+        m.weight.data.normal_(0.0, 0.02)
         m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
-        m.weight.data.normal_(0.0, 0.01)
+        m.weight.data.normal_(0.0, 0.02)
         m.bias.data.fill_(0)
     elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.01)
+        m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
 
@@ -35,6 +35,7 @@ class Encoder1(nn.Module):
         self.lrelu = nn.LeakyReLU(0.02, True)
         self.linear_means = nn.Linear(size_att*2, size_att)
         self.linear_log_var = nn.Linear(size_att*2, size_att)
+        self.dropout = nn.Dropout(p=0.5)
         self.apply(weights_init)
 
     def forward(self, res, mot=None):
@@ -60,6 +61,7 @@ class Encoder2(nn.Module):
             layer_sizes[0] += size_mot
         self.fc1=nn.Linear(layer_sizes[0], layer_sizes[-1])
         self.fc3=nn.Linear(layer_sizes[-1], size_att)
+        self.dropout = nn.Dropout(p=0.5)
         self.lrelu = nn.LeakyReLU(0.02, True)
         self.sigmoid = nn.Sigmoid()
         self.apply(weights_init)
@@ -68,10 +70,10 @@ class Encoder2(nn.Module):
         x = res
         if self.args.encoder_use_mot:
             x = torch.cat((res, mot), dim=-1)
-        # x = self.lrelu(self.fc1(x))
-        # x = self.sigmoid(self.fc3(x))
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc3(x))
+        x = self.lrelu(self.dropout(self.fc1(x)))
+        x = self.sigmoid(self.dropout(self.fc3(x)))
+        # x = torch.tanh(self.fc1(x))
+        # x = torch.tanh(self.fc3(x))
         eps = x
         return eps
 
@@ -85,14 +87,15 @@ class Generator(nn.Module):
         input_size = size_mot + size_att
         self.fc1 = nn.Linear(input_size, layer_sizes[0])
         self.fc3 = nn.Linear(layer_sizes[0], layer_sizes[1])
+        self.dropout = nn.Dropout(p=0.5)
         self.lrelu = nn.LeakyReLU(0.02, True)
         self.sigmoid = nn.Sigmoid()
         self.apply(weights_init)
 
     def _forward(self, att, mot=None):
         z = torch.cat((att, mot), dim=-1)
-        x1 = self.lrelu(self.fc1(z))
-        x = self.lrelu(self.fc3(x1))
+        x1 = self.lrelu(self.dropout(self.fc1(z)))
+        x = self.lrelu(self.dropout(self.fc3(x1)))
         return x
 
     def forward(self, att, mot=None, a1=None, feedback_layers=None):
@@ -100,7 +103,7 @@ class Generator(nn.Module):
             return self._forward(att,mot)
         else:
             z = torch.cat((att, mot), dim=-1)
-            x1 = self.lrelu(self.fc1(z))
+            x1 = self.lrelu(self.dropout(self.fc1(z)))
             feedback_out = x1 + a1*feedback_layers
             # x = self.sigmoid(self.fc3(feedback_out))
             x = self.fc3(feedback_out)
@@ -116,14 +119,15 @@ class Generator_mot(nn.Module):
         input_size = size_res+ size_att
         self.fc1 = nn.Linear(input_size, layer_sizes[0])
         self.fc3 = nn.Linear(layer_sizes[0], layer_sizes[1])
+        self.dropout = nn.Dropout(p=0.5)
         self.lrelu = nn.LeakyReLU(0.02, True)
         self.sigmoid = nn.Sigmoid()
         self.apply(weights_init)
 
     def _forward(self, res, att=None):
         z = torch.cat((res, att), dim=-1)
-        x1 = self.lrelu(self.fc1(z))
-        x = self.lrelu(self.fc3(x1))
+        x1 = self.lrelu(self.dropout(self.fc1(z)))
+        x = self.lrelu(self.dropout(self.fc3(x1)))
         return x
 
     def forward(self, att, mot=None, a1=None, feedback_layers=None):
@@ -147,8 +151,10 @@ class Discriminator_mot(nn.Module):
         self.apply(weights_init)
 
     def forward(self, x):
-        self.hidden = self.lrelu(self.fc1(self.dropout(x)))
-        h = self.lrelu(self.fc2(self.dropout(self.hidden)))
+        # self.hidden = self.fc1(x)
+        # h = self.lrelu(self.fc2(self.dropout(self.hidden)))
+        # h = self.fc2(self.hidden)
+        h = self.fc2(x)
         return h
 
 
@@ -157,11 +163,13 @@ class Discriminator_att(nn.Module):
         super(Discriminator_att, self).__init__()
         self.fc1 = nn.Linear(1024, cls_num)
         self.lrelu = nn.LeakyReLU(0.2, True)
+        self.sigmoid = nn.Sigmoid()
         self.apply(weights_init)
 
     def forward(self, x, y):
         self.input_feat = torch.cat((x, y), dim=1)
         h = self.fc1(self.input_feat)
+        # h = F.normalize(h)
         return h
 
 

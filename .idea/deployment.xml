@@ -1,28 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="On explicit save action" serverName="small_25" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+  <component name="PublishConfigData" autoUpload="On explicit save action" serverName="wf@222.199.197.78:22 password" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
     <serverData>
-      <paths name="small_23">
+      <paths name="small_wf">
         <serverdata>
           <mappings>
             <mapping deploy="/media/database/data4/wf/IFER/codes/codes4" local="$PROJECT_DIR$/codes4" web="/" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="small_25">
+      <paths name="wf@222.199.197.78:22 password">
         <serverdata>
           <mappings>
             <mapping deploy="/media/database/data4/wf/IFER/codes/codes4" local="$PROJECT_DIR$/codes4" web="/" />
-          </mappings>
-          <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/codes4/save" />
-          </excludedPaths>
-        </serverdata>
-      </paths>
-      <paths name="wf@172.25.181.39:22 password">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/media/database/data4/wf/IFER/codes/codes4" local="$PROJECT_DIR$/codes4" />
           </mappings>
         </serverdata>
       </paths>
