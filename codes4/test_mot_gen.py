@@ -11,7 +11,7 @@ import os.path as osp
 from PIL import Image
 from torchvision.transforms import ToPILImage
 
-from materials import neutral_image, image_feature_nN
+from materials import image_feature_wN as get_dataloader
 from models import model, dis_model
 from models.resnet import make_resnet18_base
 from models.resnetDeconv import make_resnet18_deconv_base
@@ -27,13 +27,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     warnings.filterwarnings("ignore")  # 忽略警告
     parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
-    parser.add_argument('--dataset', type=str, default="FERPLUS")
-    parser.add_argument('--log_dir', type=str, default="save/FERPLUS/2022-03-18/decoder0322", help='log_dir')
+    parser.add_argument('--dataset', type=str, default='RAF')
+    parser.add_argument('--log_dir', type=str, default="save/RAF/2022-03-25/decoderNewLoss", help='log_dir')
     parser.add_argument('--means_file', type=str,
-                        default='save/FERPLUS/2022-03-18/encoder/net_state/epoch100',
+                        default='save/RAF/2022-03-25/encoder/net_state/epoch200',
                         help='net state file')
     parser.add_argument('--mot_file', type=str,
-                        default='save/FERPLUS/2022-03-18/decoder0322/mot_gen_epoch60',
+                        default='save/RAF/2022-03-25/decoderNewLoss/mot_gen_epoch200',
                         help='net state file')
     parser.add_argument('--size_mot', type=int, default=512, help='dimsension of motion')
     parser.add_argument('--size_att', type=int, default=512, help='dimension of attribute')
@@ -185,13 +185,18 @@ if __name__ == '__main__':
     cnn.load_state_dict(sd)
 
     if args.dataset == 'RAF':
-        train_loader, test_loader = image_feature_nN.getRAFdata()
+        train_loader, test_loader = get_dataloader.getRAFdata()
     elif args.dataset == 'AffectNet':
-        train_loader, test_loader = image_feature_nN.getAffectdata()
+        train_loader, test_loader = get_dataloader.getAffectdata()
     elif args.dataset == 'FERPLUS':
-        train_loader, test_loader = image_feature_nN.getFERdata()
+        train_loader, test_loader = get_dataloader.getFERdata()
     elif args.dataset == 'CK+':
-        train_loader, test_loader = image_feature_nN.getCKdata()
+        train_loader, test_loader = get_dataloader.getCKdata()
+    elif args.dataset == 'CASME2':
+        train_loader, test_loader = get_dataloader.getCASME2data()
+    elif args.dataset == 'SAMM':
+        train_loader, test_loader = get_dataloader.getSAMMdata()
+
     test_nodes = train_loader.dataset.nodes
     num_cls = len(test_nodes)
 

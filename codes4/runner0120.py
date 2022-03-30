@@ -11,9 +11,23 @@ import numpy as np
 
 from materials import neutral_image
 import util
-from models import dis_model, model, incep
+from models import dis_model, model
 from models.resnet import make_resnet18_base
 from models.resnetDeconv import make_resnet18_deconv_base
+
+import argparse
+import random
+import datetime
+import pytz
+
+
+def setup_seed(seed):
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def train(device, hyper_dict):
@@ -37,7 +51,15 @@ def train(device, hyper_dict):
         train_loader, test_loader, all_loader = neutral_image.getCKdata()
         args.nepoch = 100
         args.save_epoch = 10
-        args.lr = args.lr / 10.0
+        # args.lr = args.lr / 10.0
+    elif args.dataset == 'CASME2':
+        train_loader, test_loader, all_loader = neutral_image.getCASME2data()
+        args.nepoch = 100
+        args.save_epoch = 10
+    elif args.dataset == 'SAMM':
+        train_loader, test_loader, all_loader = neutral_image.getSAMMdata()
+        args.nepoch = 100
+        args.save_epoch = 10
 
     cnn = make_resnet18_base().to(device)
     if args.GRAY is True:
@@ -81,14 +103,19 @@ def train(device, hyper_dict):
     writer = SummaryWriter(os.path.join(log_dir, 'mean_vis'))
 
     # optimG_mot = optim.Adam(netG_mot.parameters(), lr=args.lr)#, betas=(args.beta1, 0.999))
-    optimCnnDeconv = optim.Adam(cnn_deconv.parameters(), lr=args.lr * 2.0, betas=(args.beta1, 0.999))
-    optimAtt = optim.Adam(
-        [{'params': cnn.parameters(), 'lr': args.lr},
-         {'params': netE1.parameters(), 'lr': args.lr},
-         {'params': netG.parameters(), 'lr': args.lr},
-         {'params': netE2.parameters(), 'lr': args.lr},
-         {'params': netG_mot.parameters(), 'lr': args.lr},
-         ], betas=(0.9, 0.99), weight_decay=1e-4)
+    optimCnnDeconv = optim.Adam(cnn_deconv.parameters(), lr=args.lr)#, betas=(0.9, 0.999))
+    deconv_scheduler = optim.lr_scheduler.ExponentialLR(optimCnnDeconv, 0.9)
+    # optimCnnDeconv = optim.SGD(cnn_deconv.parameters(), lr=args.lr * 2.0, momentum = 0.9)
+    optimAtt = optim.SGD(
+        [{'params': cnn.parameters()},
+         {'params': netE1.parameters()},
+         {'params': netG.parameters()},
+         {'params': netE2.parameters()},
+         {'params': netG_mot.parameters()},
+         ], lr = args.lr, momentum = 0.9, weight_decay=1e-4
+        # , betas=(0.9, 0.999), weight_decay=1e-4
+    )
+    Att_scheduler = optim.lr_scheduler.ExponentialLR(optimAtt, 0.9)
 
     MSE = nn.MSELoss()
 
@@ -104,6 +131,8 @@ def train(device, hyper_dict):
         netE1.train()
         netE2.train()
 
+        lossT_z_r = []
+        lossT_z_f = []
         lossT_z = []
         lossT_mot = []
         lossT= []
@@ -111,6 +140,7 @@ def train(device, hyper_dict):
 
         for step, (data, mot, index) in enumerate(train_loader, 1):
             optimAtt.zero_grad()
+
             torch.cuda.empty_cache()
             train_size = train_size + data.size(0)
             data = data.to(device)
@@ -123,16 +153,10 @@ def train(device, hyper_dict):
                 means = Variable(torch.mean(means_t, dim=0, keepdim=True), requires_grad=True)
                 log_var = Variable(torch.mean(log_var_t, dim=0, keepdim=True), requires_grad=True)
                 std = torch.exp(0.5 * log_var)
-                # std = log_var
             else:
                 means = Variable(means_record, requires_grad=True)
                 log_var = Variable(log_var_record, requires_grad=True)
                 std = torch.exp(0.5 * log_var)
-                # std = log_var
-
-            means_record = means.data
-            log_var_record = log_var.data
-            std_record = std.data
 
             eps = netE2(input_res)
             z = means.repeat(data.size(0), 1) + eps * std
@@ -141,15 +165,18 @@ def train(device, hyper_dict):
             lossT_mot.append(util.loss_to_float(loss_mot))
             loss_z_r = MSE(input_att, z)
 
-            fake_means_t, fake_log_var_t = netE1(z)
+            # fake_means_t, fake_log_var_t = netE1(z)
+            fake_means_t, fake_log_var_t = netE1(input_att)
             fake_means = Variable(torch.mean(fake_means_t, dim=0, keepdim=True), requires_grad=False)
             fake_log_var = Variable(torch.mean(fake_log_var_t, dim=0, keepdim=True), requires_grad=False)
             fake_std = torch.exp(0.5 * fake_log_var)
-            # fake_std = fake_log_var
             fake_res = netG(att=z, mot=fake_mot)
             fake_eps = netE2(fake_res)
             fake_z = fake_means.repeat(data.size(0), 1) + fake_eps * fake_std
             loss_z_f = MSE(input_att, fake_z)
+
+            lossT_z_r.append(util.loss_to_float(loss_z_r))
+            lossT_z_f.append(util.loss_to_float(loss_z_f))
             loss_z = loss_z_r + loss_z_f
             lossT_z.append(util.loss_to_float(loss_z))
             loss = loss_z + loss_mot
@@ -160,7 +187,11 @@ def train(device, hyper_dict):
             # loss_mot.backward()
             loss.backward()
             optimAtt.step()
+            # Att_scheduler.step()
             # optimG_mot.step()
+            means_record = means.data
+            log_var_record = log_var.data
+            std_record = torch.exp(0.5 * log_var.data)
 
             if step % args.Deconv_step == 0:
                 optimCnnDeconv.zero_grad()
@@ -172,7 +203,6 @@ def train(device, hyper_dict):
                 netE1.eval()
                 netE2.eval()
 
-                eps = netE2(input_res)
                 z = means_record.repeat(data.size(0), 1) + eps.data * std_record
                 recon_tmp1 = z.unsqueeze(2)
                 recon_tmp2 = recon_tmp1.expand(recon_tmp1.size(0), recon_tmp1.size(1), 49)
@@ -183,11 +213,15 @@ def train(device, hyper_dict):
 
                 loss_deconv.backward()
                 optimCnnDeconv.step()
+                # deconv_scheduler.step()
 
         writer.add_scalar("lossT_mot", np.array(lossT_mot).mean(), epoch + 1)
         writer.add_scalar("lossT_z", np.array(lossT_z).mean(), epoch + 1)
+        writer.add_scalar("loss_z_r", np.array(lossT_z_r).mean(), epoch + 1)
+        writer.add_scalar("loss_z_f", np.array(lossT_z_f).mean(), epoch + 1)
         writer.add_scalar("lossT", np.array(lossT).mean(), epoch + 1)
         writer.add_scalar("lossT_deconv", np.array(lossT_deconv).mean(), epoch + 1)
+
         print('[%d/%d] lossT_z: %.4f, lossT_mot: %.4f, lossT: %.4f, loss_deconv: %.4f' %
               (epoch + 1, args.nepoch, np.array(lossT_z).mean(), np.array(lossT_mot).mean(),
                np.array(lossT).mean(), np.array(lossT_deconv).mean()))
@@ -221,9 +255,57 @@ def train(device, hyper_dict):
             states['cnn_deconv'] = cnn_deconv.state_dict()
             states['means'] = means_record.detach()
             states['std'] = std.detach()
+            states['lr'] = optimAtt.param_groups[0]['lr']
             torch.save(states, os.path.join(log_dir, 'net_state', 'epoch' + str(epoch + 1)))
             print('params of epoch %d are saved' % (epoch + 1))
 
 
+def mean_parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
+    parser.add_argument('--manualSeed', type=int, default=None, help='manual seed')
+    parser.add_argument('--continue_from', type=int, default=0, help='save interval')
+    parser.add_argument('--dataset', type=str, default="RAF")
+    parser.add_argument('--log_dir', type=str, default="save", help='log_dir')
+    parser.add_argument('--continue_file', type=str,
+                        default=None,
+                        help='net state file')
+    parser.add_argument('--nepoch', type=int, default=200, help='number of epochs to train for')
+    parser.add_argument('--save_epoch', type=int, default=10, help='number of epochs to save')
+    parser.add_argument('--Deconv_step', type=int, default=5, help='number of epochs to train Deconv')
+    parser.add_argument('--GRAY', default=True, help='generate gray image or not')
+
+    parser.add_argument('--lr', type=float, default=0.0005)
+    parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
+
+    parser.add_argument('--size_mot', type=int, default=512, help='dimension of motion')
+    parser.add_argument('--size_att', type=int, default=512, help='dimension of attribute')
+    parser.add_argument('--size_res', type=int, default=512, help='dimension of image feature')
+    parser.add_argument("--encoder_layer_sizes", type=list, default=[512, 1024])
+    parser.add_argument("--decoder_layer_sizes", type=list, default=[1024, 512])
+
+    parser.add_argument("--encoder_use_mot", default=False, help="Encoder use motion as input")
+
+    return parser.parse_args()
 
 
+if __name__ == '__main__':
+    mean_args = mean_parse_args()
+    torch.cuda.empty_cache()
+    global device
+    device = torch.device(mean_args.gpu if torch.cuda.is_available() else 'cpu')
+    print('using gpu:', mean_args.gpu)
+
+    cur_time = datetime.datetime.now(pytz.timezone('Asia/Shanghai'))
+    print(cur_time)
+    cur_day = str(cur_time).split(' ')
+    cur_day = cur_day[0]
+    mean_args.log_dir = os.path.join(mean_args.log_dir, mean_args.dataset, cur_day, 'encoderSGDwAdam')
+
+    print('---- START %s Gauss Encoder ----' % (mean_args.dataset))
+    if mean_args.manualSeed is None:
+        mean_args.manualSeed = random.randint(1, 10000)
+    print("Random Seed: ", mean_args.manualSeed)
+    setup_seed(mean_args.manualSeed)
+
+    train(device, mean_args)

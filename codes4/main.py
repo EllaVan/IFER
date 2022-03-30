@@ -7,6 +7,7 @@ import random
 
 import runner0120
 import mot_gen_nN
+import mot_gen_wN
 
 
 def setup_seed(seed):
@@ -20,10 +21,10 @@ def setup_seed(seed):
 
 def mean_parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
+    parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu choice')
     parser.add_argument('--manualSeed', type=int, default=None, help='manual seed')
     parser.add_argument('--continue_from', type=int, default=0, help='save interval')
-    parser.add_argument('--dataset', type=str, default="AffectNet")
+    parser.add_argument('--dataset', type=str, default="SAMM")
     parser.add_argument('--log_dir', type=str, default="save", help='log_dir')
     parser.add_argument('--continue_file', type=str,
                         default=None,
@@ -33,7 +34,7 @@ def mean_parse_args():
     parser.add_argument('--Deconv_step', type=int, default=5, help='number of epochs to train Deconv')
     parser.add_argument('--GRAY', default=True, help='generate gray image or not')
 
-    parser.add_argument('--lr', type=float, default=0.0005)
+    parser.add_argument('--lr', type=float, default=0.005) # 0.0005, 0.001
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 
     parser.add_argument('--size_mot', type=int, default=512, help='dimension of motion')
@@ -50,12 +51,12 @@ def mean_parse_args():
 
 def mot_parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
+    parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu choice')
     parser.add_argument('--manualSeed', type=int, default=None, help='manual seed')
     parser.add_argument('--start_epoch', type=int, default=0, help='save interval')
     parser.add_argument('--end_epoch', type=int, default=400, help='number of epochs to train for')
     parser.add_argument('--save_epoch', type=int, default=20, help='number of epochs to save for')
-    parser.add_argument('--dataset', type=str, default="AffectNet")
+    parser.add_argument('--dataset', type=str, default='SAMM')
     parser.add_argument('--log_dir', type=str, default="save", help='log_dir')
     parser.add_argument('--means_file', type=str,
                         default=None,
@@ -109,5 +110,5 @@ if __name__ == '__main__':
     mot_args.means_file = os.path.join(mean_args.log_dir, 'net_state', 'epoch' + str(mean_args.nepoch))
     mot_args.manualSeed = mean_args.manualSeed
 
-    mot_gen_nN.run(device, mot_args)
+    mot_gen_wN.run(device, mot_args)
 

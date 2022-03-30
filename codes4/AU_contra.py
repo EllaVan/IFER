@@ -417,4 +417,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    file = torch.load('/media/database/data4/wf/IFER/codes/codes4/save/RAF/2022-03-25/encoder/net_state/epoch200',
+                      map_location='cpu')

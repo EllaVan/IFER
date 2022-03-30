@@ -12,7 +12,7 @@ import torch.nn as nn
 import numpy as np
 
 from models.resnet import ResNet
-from materials import image_feature_nN
+from materials import image_feature_wN as get_dataloader
 
 
 def set_gpu(gpu):
@@ -24,8 +24,8 @@ def set_gpu(gpu):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
-    parser.add_argument('--dataset', type=str, default="FERPLUS")
+    parser.add_argument('--gpu', type=str, default='cuda:0', help='gpu choice')
+    parser.add_argument('--dataset', type=str, default='SAMM')
     return parser.parse_args()
 
 
@@ -34,21 +34,29 @@ if __name__ == '__main__':
     set_gpu(args.gpu)
 
     if args.dataset == 'RAF':
-        train_loader, test_loader = image_feature_nN.getRAFdata()
+        train_loader, test_loader = get_dataloader.getRAFdata()
         res_file = torch.load('RAF/nN/epoch-40res.pth', map_location=torch.device('cpu'))
         fc_file = torch.load('RAF/nN/epoch-40fc.pth', map_location=torch.device('cpu'))
     elif args.dataset == 'AffectNet':
-        train_loader, test_loader = image_feature_nN.getAffectdata()
+        train_loader, test_loader = get_dataloader.getAffectdata()
         res_file = torch.load('AffectNet/nN/epoch-30res.pth', map_location=torch.device('cpu'))
         fc_file = torch.load('AffectNet/nN/epoch-30fc.pth', map_location=torch.device('cpu'))
     elif args.dataset == 'FERPLUS':
-        train_loader, test_loader = image_feature_nN.getFERdata()
-        res_file = torch.load('FERPLUS/nN/epoch-60res.pth', map_location=torch.device('cpu'))
-        fc_file = torch.load('FERPLUS/nN/epoch-60fc.pth', map_location=torch.device('cpu'))
+        train_loader, test_loader = get_dataloader.getFERdata()
+        res_file = torch.load('FERPLUS/wN/epoch-30res.pth', map_location=torch.device('cpu'))
+        fc_file = torch.load('FERPLUS/wN/epoch-30fc.pth', map_location=torch.device('cpu'))
     elif args.dataset == 'CK+':
-        train_loader, test_loader = image_feature_nN.getCKdata()
-        res_file = torch.load('CK+/nN/epoch-40res.pth', map_location=torch.device('cpu'))
-        fc_file = torch.load('CK+/nN/epoch-40fc.pth', map_location=torch.device('cpu'))
+        train_loader, test_loader = get_dataloader.getCKdata()
+        res_file = torch.load('CK+/wN_8/epoch-20res.pth', map_location=torch.device('cpu'))
+        fc_file = torch.load('CK+/wN_8/epoch-20fc.pth', map_location=torch.device('cpu'))
+    elif args.dataset == 'CASME2':
+        train_loader, test_loader = get_dataloader.getCASME2data()
+        res_file = torch.load('CASME2/wN/epoch-10res.pth', map_location=torch.device('cpu'))
+        fc_file = torch.load('CASME2/wN/epoch-10fc.pth', map_location=torch.device('cpu'))
+    elif args.dataset == 'SAMM':
+        train_loader, test_loader = get_dataloader.getSAMMdata()
+        res_file = torch.load('SAMM/wN/epoch-40res.pth', map_location=torch.device('cpu'))
+        fc_file = torch.load('SAMM/wN/epoch-40fc.pth', map_location=torch.device('cpu'))
 
     nodes = train_loader.dataset.nodes
     num_cls = len(nodes)

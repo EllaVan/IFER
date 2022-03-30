@@ -536,8 +536,271 @@ def getCKdata():
     return train_loader, test_loader
 
 
+def CASME2parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str,
+                        default='/media/database/data2/Expression/CASME2')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size.')
+    parser.add_argument('--workers', type=int, default=4)
+    return parser.parse_args()
+
+
+class CASME2SubDataset(data.Dataset):
+    def __init__(self, data_path, label_index, phase, transform=None):
+        self.phase = phase
+        self.transform = transform
+        self.label_path = os.path.join(data_path, 'CASME2-coding.xlsx')
+        self.data_path = os.path.join(data_path, 'Cropped')
+        label_file = pd.read_excel(self.label_path)
+        self.nodes = ['sadness', 'repression', 'surprise', 'happiness', 'fear', 'disgust', 'others']
+        self.emo_dict = dict(zip(self.nodes, list(range(len(self.nodes)))))
+        self.split = [0.9, 0.1]
+
+        onset_file_names = []
+        offset_file_names = []
+        emo_file_names = [], [], [], [], [], [], []
+        for i in range(len(label_file)):
+            cur_file_info = label_file.iloc[i]
+            cur_file_path = os.path.join(self.data_path, 'sub'+'%02d' % int(cur_file_info['Subject']), cur_file_info['Filename'])
+            # format_file = os.listdir(cur_file_path)
+
+            emo_img_path = 'reg_img' + str(cur_file_info['ApexFrame']) + '.jpg'
+            cur_emo_label = self.emo_dict[cur_file_info['Estimated Emotion']]
+            # if cur_emo_label != len(self.nodes)-1:
+            emo_file_names[cur_emo_label].append(os.path.join(cur_file_path, emo_img_path))
+
+            onset_img_path = 'reg_img' + str(cur_file_info['OnsetFrame']) + '.jpg'
+            offset_img_path = 'reg_img' + str(cur_file_info['OffsetFrame']) + '.jpg'
+            onset_file_names.append(os.path.join(cur_file_path, onset_img_path))
+            offset_file_names.append(os.path.join(cur_file_path, offset_img_path))
+
+        if phase == 'train':
+            # emo_file_names = emo_file_names + onset_file_names
+            self.paths = []
+            self.labels = []
+            for class_i in range(len(self.nodes)):
+                file_names = emo_file_names[class_i]
+                imgs_num = len(file_names)
+                tr_num = int(imgs_num * self.split[0])
+                for tr_img_i in range(tr_num):
+                    self.paths.append(file_names[tr_img_i])
+                    self.labels.append(class_i)
+
+        elif phase == 'test':
+            # emo_file_names = emo_file_names + onset_file_names
+            self.paths = []
+            self.labels = []
+            file_names = emo_file_names[label_index]
+            imgs_num = len(file_names)
+            tr_num = int(imgs_num * self.split[0])
+            for te_img_i in range(tr_num, imgs_num):
+                self.paths.append(file_names[te_img_i])
+                self.labels.append(label_index)
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        # image = image[:, :, ::-1]  # BGR to RGB
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        if image is None:
+            image, label, index = None, None, None
+            return image, label, index
+        else:
+            # image = image[:, :, ::-1]  # BGR to RGB
+            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image = image.copy()
+            label = self.labels[idx]
+            if self.transform is not None:
+                image = self.transform(image)
+        return image, label, idx
+
+
+def getCASME2data():
+    args = CASME2parse_args()
+
+    # 加载train data
+    data_transforms = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225]),
+        transforms.Normalize([0.485, ], [0.229, ]),
+        transforms.RandomErasing(scale=(0.02, 0.25))
+    ])
+    train_dataset = CASME2SubDataset(args.data_path, 0, phase='train', transform=data_transforms)
+    print('Train set size:', train_dataset.__len__())
+    train_loader = torch.utils.data.DataLoader(train_dataset,
+                                               batch_size=args.batch_size,
+                                               num_workers=args.workers,
+                                               shuffle=True,
+                                               pin_memory=True)
+
+    test_dataset = []
+    test_loader = []
+    data_transforms_val = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, ], [0.229, ]),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225])
+    ])
+    test_len = 0
+    for i in range(len(train_dataset.nodes)):
+        label_i = i
+        test_dataset.append(CASME2SubDataset(args.data_path, label_i, phase='test',
+                                         transform=data_transforms_val))
+        test_loader.append(torch.utils.data.DataLoader(test_dataset[i],
+                                                       batch_size=args.batch_size,
+                                                       num_workers=args.workers,
+                                                       shuffle=False,
+                                                       pin_memory=True))
+        test_len += test_dataset[i].__len__()
+    print('Test set size:', test_len)
+
+    # return train_dataset, test_dataset
+    return train_loader, test_loader
+
+
+def SAMMparse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str,
+                        default='/media/database/data2/Expression/SAMM/SAMM')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size.')
+    parser.add_argument('--workers', type=int, default=4)
+    return parser.parse_args()
+
+
+class SAMMSubDataset(data.Dataset):
+    def __init__(self, data_path, label_index, phase, transform=None):
+        self.phase = phase
+        self.transform = transform
+        self.label_path = os.path.join(data_path, 'SAMM.xlsx')
+        self.data_path = data_path
+        label_file = pd.read_excel(self.label_path)
+        # self.nodes = list(set(label_file['Estimated Emotion']))
+        self.nodes = ['Fear', 'Happiness', 'Surprise', 'Contempt', 'Anger', 'Sadness', 'Disgust', 'Other']
+        self.emo_dict = dict(zip(self.nodes, list(range(len(self.nodes)))))
+        self.split = [0.9, 0.1]
+
+        emo_file_names = [], [], [], [], [], [], [], []
+        onset_file_names = []
+        offset_file_names = []
+        for i in range(len(label_file)):
+            cur_file_info = label_file.iloc[i]
+            sub = '%03d' % int(cur_file_info['Subject'])
+            cur_file_path = os.path.join(self.data_path, sub, cur_file_info['Filename'])
+            format_len = len(os.listdir(cur_file_path)[0].split('.')[0].split('_')[1])
+            format_len = '%0' + str(format_len) + 'd'
+            emo_img_path = sub + '_' + format_len % int(cur_file_info['Apex Frame']) + '.jpg'
+            cur_emo_label = self.emo_dict[cur_file_info['Estimated Emotion']]
+            # if cur_emo_label != len(self.nodes) - 1:
+            emo_file_names[cur_emo_label].append(os.path.join(cur_file_path, emo_img_path))
+
+            onset_img_path = sub + '_' + format_len % int(cur_file_info['Onset Frame']) + '.jpg'
+            offset_img_path = sub + '_' + format_len % int(cur_file_info['Offset Frame']) + '.jpg'
+            onset_file_names.append(os.path.join(cur_file_path, onset_img_path))
+            offset_file_names.append(os.path.join(cur_file_path, offset_img_path))
+
+        if phase == 'train':
+            # emo_file_names = emo_file_names + onset_file_names
+            self.paths = []
+            self.labels = []
+            for class_i in range(len(self.nodes)):
+                file_names = emo_file_names[class_i]
+                imgs_num = len(file_names)
+                tr_num = int(imgs_num * self.split[0])
+                for tr_img_i in range(tr_num):
+                    self.paths.append(file_names[tr_img_i])
+                    self.labels.append(class_i)
+
+        elif phase == 'test':
+            # emo_file_names = emo_file_names + offset_file_names
+            self.paths = []
+            self.labels = []
+            file_names = emo_file_names[label_index]
+            imgs_num = len(file_names)
+            tr_num = int(imgs_num * self.split[0])
+            for te_img_i in range(tr_num, imgs_num):
+                self.paths.append(file_names[te_img_i])
+                self.labels.append(label_index)
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        # image = image[:, :, ::-1]  # BGR to RGB
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        if image is None:
+            image, label, index = None, None, None
+            return image, label, index
+        else:
+            # image = image[:, :, ::-1]  # BGR to RGB
+            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image = image.copy()
+            label = self.labels[idx]
+            if self.transform is not None:
+                image = self.transform(image)
+        return image, label, idx
+
+
+def getSAMMdata():
+    args = SAMMparse_args()
+
+    # 加载train data
+    data_transforms = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225]),
+        transforms.Normalize([0.485, ], [0.229, ]),
+        transforms.RandomErasing(scale=(0.02, 0.25))
+    ])
+    train_dataset = SAMMSubDataset(args.data_path, 0, phase='train', transform=data_transforms)
+    print('Train set size:', train_dataset.__len__())
+    train_loader = torch.utils.data.DataLoader(train_dataset,
+                                               batch_size=args.batch_size,
+                                               num_workers=args.workers,
+                                               shuffle=True,
+                                               pin_memory=True)
+
+    test_dataset = []
+    test_loader = []
+    data_transforms_val = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, ], [0.229, ]),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225])
+    ])
+    test_len = 0
+    for i in range(len(train_dataset.nodes)):
+        label_i = i
+        test_dataset.append(SAMMSubDataset(args.data_path, label_i, phase='test',
+                                         transform=data_transforms_val))
+        test_loader.append(torch.utils.data.DataLoader(test_dataset[i],
+                                                       batch_size=args.batch_size,
+                                                       num_workers=args.workers,
+                                                       shuffle=False,
+                                                       pin_memory=True))
+        test_len += test_dataset[i].__len__()
+    print('Test set size:', test_len)
+
+    # return train_dataset, test_dataset
+    return train_loader, test_loader
+
 if __name__ == '__main__':
-    # RAF_train_loader, RAF_test_loader = getRAFdata()
-    # AffectNet_train_loader, AffectNet_test_loader = getAffectdata()
-    FER_train_loader, FER_test_loader = getFERdata()
-    # CK_train_set, CK_test_set = getCKdata()
+    # RAF_train_loader, RAF_test_loader, RAF_all_loader = getRAFdata()
+    # AffectNet_train_loader, AffectNet_test_loader, AffectNet_all_loader = getAffectdata()
+    # FER_train_loader, FER_test_loader, FER_all_loader = getFERdata()
+    # CK_train_set, CK_test_set, CK_all_loader = getCKdata()
+    CASME2_train_set, CASME2_test_set = getCASME2data()
+    SAMM_train_set, SAMM_test_set = getSAMMdata()

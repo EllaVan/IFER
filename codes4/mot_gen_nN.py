@@ -30,11 +30,11 @@ def setup_seed(seed):
 def mot_parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', type=str, default='cuda:1', help='gpu choice')
-    parser.add_argument('--manualSeed', type=int, default=6128, help='manual seed')
-    parser.add_argument('--dataset', type=str, default="CK+")
+    parser.add_argument('--manualSeed', type=int, default=1442, help='manual seed')
+    parser.add_argument('--dataset', type=str, default='CK+')
     parser.add_argument('--means_file', type=str,
-                        default='save/CK+/2022-03-19/encoder/net_state/epoch100')
-    parser.add_argument('--log_dir', type=str, default="save/CK+/2022-03-19/decoder0322", help='log_dir')
+                        default='save/CK+/2022-03-26/encoder/net_state/epoch100')
+    parser.add_argument('--log_dir', type=str, default="save/CK+/2022-03-26/decoder_8", help='log_dir')
 
     parser.add_argument('--start_epoch', type=int, default=0, help='save interval')
     parser.add_argument('--start_file', type=str,
@@ -142,14 +142,6 @@ def run(device, args):
         sd = Dis_att.state_dict()
         sd.update(mot_f['Dis_att'])
         Dis_att.load_state_dict(sd)
-
-        sd = netE2.state_dict()
-        sd.update(mot_f['netE2'])
-        netE2.load_state_dict(sd)
-
-        sd = netG_mot.state_dict()
-        sd.update(mot_f['netG_mot'])
-        netG_mot.load_state_dict(sd)
 
     optim_mot = optim.Adam(
         [{'params': netG_mot.parameters(), 'lr': args.lr},
